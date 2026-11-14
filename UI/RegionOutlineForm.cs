@@ -3,15 +3,16 @@ using LiteRec.Interop;
 namespace LiteRec.UI;
 
 /// <summary>
-/// A thin frame drawn just outside the recorded region so the user can see what is being captured.
-/// The window is shaped like a hollow rectangle, so it never covers (or appears in) the recording
-/// and does not take focus or intercept clicks inside the region.
+/// A thin frame drawn just outside the area that is (or is about to be) recorded: the selected
+/// window's content or the custom region. The window is shaped like a hollow rectangle, so it never
+/// covers the recorded pixels and does not take focus or intercept clicks inside the area.
 /// </summary>
 internal sealed class RegionOutlineForm : Form
 {
     private const int Thickness = 3;
+    private Rectangle _target;
 
-    public RegionOutlineForm(Rectangle region)
+    public RegionOutlineForm()
     {
         AutoScaleMode = AutoScaleMode.None;
         FormBorderStyle = FormBorderStyle.None;
@@ -19,15 +20,30 @@ internal sealed class RegionOutlineForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         BackColor = Color.Red;
-        Bounds = Rectangle.Inflate(region, Thickness, Thickness);
-
-        // Cut the middle out: only a Thickness-wide frame remains part of the window.
-        var shape = new Region(new Rectangle(0, 0, Width, Height));
-        shape.Exclude(new Rectangle(Thickness, Thickness, region.Width, region.Height));
-        Region = shape;
     }
 
-    /// <summary>Red while recording, amber while paused.</summary>
+    /// <summary>Moves the frame around <paramref name="area"/> (screen pixels). Cheap when nothing changed.</summary>
+    public void SetTarget(Rectangle area)
+    {
+        if (area == _target)
+        {
+            return;
+        }
+
+        bool sizeChanged = area.Size != _target.Size;
+        _target = area;
+        Bounds = Rectangle.Inflate(area, Thickness, Thickness);
+
+        if (sizeChanged)
+        {
+            // Cut the middle out: only a Thickness-wide frame remains part of the window.
+            var shape = new Region(new Rectangle(0, 0, area.Width + 2 * Thickness, area.Height + 2 * Thickness));
+            shape.Exclude(new Rectangle(Thickness, Thickness, area.Width, area.Height));
+            Region = shape;
+        }
+    }
+
+    /// <summary>Red normally, amber while the recording is paused.</summary>
     public void SetPaused(bool paused) => BackColor = paused ? Color.Orange : Color.Red;
 
     protected override bool ShowWithoutActivation => true;

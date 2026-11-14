@@ -30,6 +30,8 @@ internal sealed class MainForm : Form
     private readonly AppSettings _settings;
     private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 250 };
     private readonly ToolTip _toolTip = new();
+    private readonly System.Windows.Forms.Timer _outlineTimer = new() { Interval = 150 }; // follows the selected window
+    private Rectangle? _recordedRegion; // custom region currently being recorded
 
     // Header
     private readonly Label _title = new() { AutoSize = true, Anchor = AnchorStyles.Left, Text = "LiteRec" };
@@ -526,10 +528,12 @@ internal sealed class MainForm : Form
             ApplyLanguage();
         };
 
-        _screenMode.CheckedChanged += (_, _) => UpdateControlStates();
-        _windowMode.CheckedChanged += (_, _) => UpdateControlStates();
-        _regionMode.CheckedChanged += (_, _) => UpdateControlStates();
+        _screenMode.CheckedChanged += (_, _) => { UpdateControlStates(); UpdateOutline(); };
+        _windowMode.CheckedChanged += (_, _) => { UpdateControlStates(); UpdateOutline(); };
+        _regionMode.CheckedChanged += (_, _) => { UpdateControlStates(); UpdateOutline(); };
         _windows.DropDown += (_, _) => FillWindows(); // always show the windows that are open right now
+        _windows.SelectedIndexChanged += (_, _) => UpdateOutline();
+        _outlineTimer.Tick += (_, _) => UpdateOutline();
         _selectRegion.Click += (_, _) => SelectRegion();
 
         _systemAudio.CheckedChanged += (_, _) => OnAudioSettingChanged();
@@ -671,9 +675,48 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (_regionMode.Checked)
+        _recordedRegion = _regionMode.Checked ? options.Target.ScreenBounds : null;
+        UpdateOutline();
+    }
+
+    /// <summary>
+    /// Shows a red frame around what will be / is being recorded: the selected window's content
+    /// (as soon as a window is chosen, following it when it moves) or the custom region while recording.
+    /// </summary>
+    private void UpdateOutline()
+    {
+        Rectangle? area = null;
+        WindowInfo? window = _windowMode.Checked ? SelectedValue<WindowInfo>(_windows) : null;
+
+        if (window is not null)
         {
-            _outline = new RegionOutlineForm(options.Target.ScreenBounds);
+            if (NativeMethods.IsWindow(window.Handle) && !NativeMethods.IsIconic(window.Handle) &&
+                NativeMethods.GetClientRect(window.Handle, out var client) && client.Width > 0 && client.Height > 0)
+            {
+                var origin = new NativeMethods.POINT();
+                NativeMethods.ClientToScreen(window.Handle, ref origin);
+                area = new Rectangle(origin.X, origin.Y, client.Width, client.Height);
+            }
+        }
+        else if (_recordedRegion is not null)
+        {
+            area = _recordedRegion;
+        }
+
+        // Poll the window position only while a window is selected; otherwise no timer runs.
+        _outlineTimer.Enabled = window is not null;
+
+        if (area is null)
+        {
+            _outline?.Hide();
+            return;
+        }
+
+        _outline ??= new RegionOutlineForm();
+        _outline.SetTarget(area.Value);
+        _outline.SetPaused(_recorder.State == RecorderState.Paused);
+        if (!_outline.Visible)
+        {
             _outline.Show();
         }
     }
@@ -702,8 +745,8 @@ internal sealed class MainForm : Form
         }
         finally
         {
-            _outline?.Close();
-            _outline = null;
+            _recordedRegion = null;
+            UpdateOutline();
         }
 
         UpdateLastFileLink();
@@ -800,6 +843,10 @@ internal sealed class MainForm : Form
     {
         RecorderState state = _recorder.State;
         _outline?.SetPaused(state == RecorderState.Paused);
+        if (state == RecorderState.Idle)
+        {
+            UpdateOutline();
+        }
 
         // The timer only runs while there is something to update, so the idle app uses no CPU.
         _uiTimer.Enabled = state is RecorderState.Recording or RecorderState.Paused;
@@ -1027,6 +1074,7 @@ internal sealed class MainForm : Form
         if (disposing)
         {
             _uiTimer.Dispose();
+            _outlineTimer.Dispose();
             _toolTip.Dispose();
             _outline?.Dispose();
         }
