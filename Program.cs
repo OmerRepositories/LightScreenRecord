@@ -17,9 +17,16 @@ internal static class Program
         ApplicationConfiguration.Initialize();     // per-monitor DPI awareness, visual styles (see .csproj)
         Application.SetColorMode(SystemColorMode.System); // follow the Windows light/dark setting
 
-        // Last line of defence: report unexpected UI-thread errors instead of crashing silently.
+        // Record every kind of unexpected error, including those on worker threads, which would
+        // otherwise terminate the process silently.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => CrashLog.Write("Unhandled exception (process terminating)", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) => { CrashLog.Write("Unobserved task exception", e.Exception); e.SetObserved(); };
         Application.ThreadException += (_, e) =>
-            MessageBox.Show(e.Exception.Message, "LiteRec", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        {
+            CrashLog.Write("UI thread exception", e.Exception);
+            MessageBox.Show($"{e.Exception.Message}\n\n{CrashLog.FilePath}", "LiteRec", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        };
 
         Application.Run(new MainForm());
     }

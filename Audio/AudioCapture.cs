@@ -146,7 +146,26 @@ internal sealed class AudioCapture : IDisposable
         var clock = Stopwatch.StartNew();
         long framesEmitted = 0;
 
+        bool errorLogged = false;
         while (_running)
+        {
+            try
+            {
+                MixTick();
+            }
+            catch (Exception ex)
+            {
+                // An exception here (device removed, driver hiccup) would kill the whole process.
+                // Skip this tick; the recorder pads any gap with silence.
+                if (!errorLogged)
+                {
+                    errorLogged = true;
+                    CrashLog.Write("Audio thread error (recording continues)", ex);
+                }
+            }
+        }
+
+        void MixTick()
         {
             timer.Wait(TickMilliseconds * TimeSpan.TicksPerMillisecond);
 
@@ -158,7 +177,7 @@ internal sealed class AudioCapture : IDisposable
             long pending = framesDue - framesEmitted;
             if (pending <= 0)
             {
-                continue;
+                return;
             }
 
             if (pending > MaxFramesPerTick)

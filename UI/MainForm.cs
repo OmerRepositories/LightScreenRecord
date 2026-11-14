@@ -715,8 +715,16 @@ internal sealed class MainForm : Form
             return;
         }
 
-        _outline ??= new RegionOutlineForm();
-        _outline.SetTarget(area.Value);
+        if (_outline is null)
+        {
+            _outline = new RegionOutlineForm();
+            _outline.AreaChanged += OnOutlineAreaChanged;
+            _outline.DragCompleted += SaveSettings;
+        }
+
+        // The custom region can be dragged and resized with the mouse until recording starts.
+        bool editable = _regionMode.Checked && _recorder.State == RecorderState.Idle;
+        _outline.SetTarget(area.Value, editable);
         _outline.SetPaused(_recorder.State == RecorderState.Paused);
         if (!_outline.Visible)
         {
@@ -985,6 +993,13 @@ internal sealed class MainForm : Form
             Activate();
             UpdateOutline();
         }
+    }
+
+    /// <summary>The user dragged or resized the red frame: that is the new recording region.</summary>
+    private void OnOutlineAreaChanged(Rectangle area)
+    {
+        _region = area;
+        UpdateRegionInfo();
     }
 
     private void OnAudioSettingChanged()
