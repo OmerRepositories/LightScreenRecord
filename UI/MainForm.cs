@@ -559,6 +559,7 @@ internal sealed class MainForm : Form
     {
         base.OnShown(e);
         FillWindows();
+        UpdateOutline(); // a region remembered from last time is outlined right away
         try
         {
             await LoadAudioDevicesAsync();
@@ -698,9 +699,11 @@ internal sealed class MainForm : Form
                 area = new Rectangle(origin.X, origin.Y, client.Width, client.Height);
             }
         }
-        else if (_recordedRegion is not null)
+        else if (_regionMode.Checked)
         {
-            area = _recordedRegion;
+            // While recording use the exact (monitor-clipped) area being captured; before that,
+            // show the region the user selected so they can see what will be recorded.
+            area = _recordedRegion ?? _region;
         }
 
         // Poll the window position only while a window is selected; otherwise no timer runs.
@@ -964,8 +967,9 @@ internal sealed class MainForm : Form
 
     private void SelectRegion()
     {
-        // Get the panel out of the way so the user can draw over whatever is underneath it.
+        // Get the panel (and the old outline) out of the way so the user can draw over whatever is underneath.
         Hide();
+        _outline?.Hide();
         try
         {
             using var selector = new RegionSelectorForm(Loc.T("RegionHint"));
@@ -979,6 +983,7 @@ internal sealed class MainForm : Form
         {
             Show();
             Activate();
+            UpdateOutline();
         }
     }
 
