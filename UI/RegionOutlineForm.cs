@@ -17,6 +17,7 @@ internal sealed class RegionOutlineForm : Form
     private const int GripLength = 56;          // length of the "move" grip on each edge
     private const int CornerSize = 22;          // length of the corner resize zones along the edges
     private const int MinimumArea = 64;
+    private const int MoveHandleSize = 36;
 
     private enum Hit { None, Move, Left, Right, Top, Bottom, TopLeft, TopRight, BottomLeft, BottomRight }
 
@@ -72,12 +73,31 @@ internal sealed class RegionOutlineForm : Form
         Invalidate();
     }
 
-    /// <summary>Cuts the middle out: only a frame-wide ring remains part of the window.</summary>
+    /// <summary>The large "move" handle, in client coordinates: just inside the top-left corner of the area.</summary>
+    private Rectangle MoveHandle => new(_frame + 8, _frame + 8, MoveHandleSize, MoveHandleSize);
+
+    /// <summary>
+    /// Cuts the middle out so only a frame-wide ring remains part of the window. In editable mode
+    /// the move handle is added back; the rest of the area stays click-through.
+    /// </summary>
     private void ApplyShape()
     {
         var shape = new Region(new Rectangle(0, 0, _area.Width + 2 * _frame, _area.Height + 2 * _frame));
         shape.Exclude(new Rectangle(_frame, _frame, _area.Width, _area.Height));
+        if (_editable)
+        {
+            shape.Union(MoveHandle);
+        }
+
         Region = shape;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        // Keep this window out of the recording: the move handle overlaps the recorded area.
+        NativeMethods.SetWindowDisplayAffinity(Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
     }
 
     /// <summary>Red normally, amber while the recording is paused.</summary>
@@ -93,6 +113,11 @@ internal sealed class RegionOutlineForm : Form
         if (!_editable)
         {
             return Hit.None;
+        }
+
+        if (MoveHandle.Contains(p))
+        {
+            return Hit.Move;
         }
 
         int w = Width, h = Height;
@@ -231,6 +256,24 @@ internal sealed class RegionOutlineForm : Form
         e.Graphics.FillRectangle(grip, (w - GripLength) / 2, h - _frame + 1, GripLength, _frame - 2);
         e.Graphics.FillRectangle(grip, 1, (h - GripLength) / 2, _frame - 2, GripLength);
         e.Graphics.FillRectangle(grip, w - _frame + 1, (h - GripLength) / 2, _frame - 2, GripLength);
+
+        // Move handle: a four-way arrow cross on a solid square.
+        Rectangle box = MoveHandle;
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        float cx = box.Left + box.Width / 2f, cy = box.Top + box.Height / 2f, reach = box.Width / 2f - 5f, head = 5f;
+        using var pen = new Pen(Color.White, 2.5f);
+        e.Graphics.DrawLine(pen, cx - reach, cy, cx + reach, cy);
+        e.Graphics.DrawLine(pen, cx, cy - reach, cx, cy + reach);
+        foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+        {
+            float tx = cx + dx * reach, ty = cy + dy * reach;
+            e.Graphics.FillPolygon(grip, new PointF[]
+            {
+                new(tx + dx * 2f, ty + dy * 2f),
+                new(tx - dx * head + dy * head, ty - dy * head + dx * head),
+                new(tx - dx * head - dy * head, ty - dy * head - dx * head),
+            });
+        }
     }
 
     protected override bool ShowWithoutActivation => true;
