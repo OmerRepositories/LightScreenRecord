@@ -91,6 +91,9 @@ internal sealed class MainForm : Form
     private string? _lastSavedPath;
     private string? _notice;        // one-off message shown in the status line while idle
     private bool _noticeIsError;
+    private bool _hardwareChecked;
+    // Checked in the background at start-up so it never delays pressing Start.
+    private readonly Task<bool> _hasHardwareEncoder = Task.Run(MediaFoundation.HasHardwareH264Encoder);
     private string? _hotkeyProblem; // name of a hotkey that could not be registered
     private bool _loading = true;   // suppresses change handlers while controls are being filled
     private bool _closeAfterStop;
@@ -665,6 +668,16 @@ internal sealed class MainForm : Form
 
         SaveSettings();
         _notice = null;
+
+        // Tell the user once per run if this PC has no hardware encoder (software encoding is heavy).
+        if (!_hardwareChecked)
+        {
+            _hardwareChecked = true;
+            if (!await _hasHardwareEncoder)
+            {
+                MessageBox.Show(this, Loc.T("NoHwEncoder"), "LiteRec", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
 
         try
         {

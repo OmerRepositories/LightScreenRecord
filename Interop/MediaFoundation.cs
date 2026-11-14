@@ -74,6 +74,62 @@ internal static unsafe class MediaFoundation
     [DllImport("mfreadwrite.dll", CharSet = CharSet.Unicode)]
     public static extern int MFCreateSinkWriterFromURL(string outputUrl, IntPtr byteStream, IntPtr attributes, out IntPtr sinkWriter);
 
+    [DllImport("mfplat.dll")]
+    private static extern int MFTEnumEx(in Guid category, uint flags, IntPtr input, in MftRegisterTypeInfo output, out IntPtr activates, out uint count);
+
+    [DllImport("ole32.dll")]
+    private static extern void CoTaskMemFree(IntPtr memory);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MftRegisterTypeInfo
+    {
+        public Guid MajorType;
+        public Guid Subtype;
+    }
+
+    /// <summary>True when Windows finds at least one hardware H.264 encoder (Intel, NVIDIA or AMD).</summary>
+    public static bool HasHardwareH264Encoder()
+    {
+        try
+        {
+            if (Startup() < 0)
+            {
+                return true; // cannot tell; do not raise a false alarm
+            }
+
+            try
+            {
+                var category = new Guid("F79EAC7D-E545-4387-BDEE-D647D7BDE42A"); // MFT_CATEGORY_VIDEO_ENCODER
+                var h264 = new MftRegisterTypeInfo { MajorType = MFMediaType_Video, Subtype = MFVideoFormat_H264 };
+                const uint hardwareFlag = 0x4 | 0x40; // MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER
+                if (MFTEnumEx(category, hardwareFlag, IntPtr.Zero, in h264, out IntPtr activates, out uint count) < 0)
+                {
+                    return true;
+                }
+
+                for (uint i = 0; i < count; i++)
+                {
+                    Marshal.Release(((IntPtr*)activates)[i]);
+                }
+
+                if (activates != IntPtr.Zero)
+                {
+                    CoTaskMemFree(activates);
+                }
+
+                return count > 0;
+            }
+            finally
+            {
+                MFShutdown();
+            }
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
     public static int Startup() => MFStartup(MF_VERSION, 0);
 
     private static void** VTable(IntPtr comObject) => *(void***)comObject;

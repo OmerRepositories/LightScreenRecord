@@ -95,6 +95,7 @@ internal static class Loc
         ["ErrStart"] = ("Could not start recording.\n\n{0}", "לא ניתן להתחיל הקלטה.\n\n{0}"),
         ["ErrRecording"] = ("The recording stopped because of an error.\n\n{0}", "ההקלטה נעצרה עקב שגיאה.\n\n{0}"),
         ["ErrHotkey"] = ("Hotkey {0} is used by another program", "מקש הקיצור {0} תפוס על ידי תוכנה אחרת"),
+        ["NoHwEncoder"] = ("No hardware video encoder was found on this computer.\n\nRecording will still work, but it uses the processor much more, so the PC may slow down. Choosing a lower resolution helps.", "לא נמצא מקודד וידאו חומרתי במחשב זה.\n\nההקלטה עדיין תעבוד, אבל היא תעמיס הרבה יותר על המעבד והמחשב עלול להאט. בחירה ברזולוציה נמוכה יותר תעזור."),
         ["TargetClosed"] = ("The recorded window was closed - recording saved.", "החלון המוקלט נסגר - ההקלטה נשמרה."),
     };
 }
